@@ -1,15 +1,15 @@
 # Model Service Project
 
-This project implements a WebSocket-based TCP server for AI model inference, supporting models like `minicpm-o_2_6` and `codellama-13b` with CUDA acceleration. It runs on a NAS-NVR Ubuntu server with an NVIDIA GPU (24 GB VRAM, CUDA 12.4) and is deployed using Docker. The setup includes configuration files, Python scripts, adapters, and a symlink for model weights to optimize storage.
+This project implements a WebSocket-based TCP server for AI model inference, supporting models like `minicpm-o_2_6` and `codellama-13b` with CUDA acceleration. It is deployed using Docker on a Linux system with an NVIDIA GPU. The setup includes configuration files, Python scripts, adapters, and symlinks for model weights to optimize storage.
 
 ## Project Overview
 - **Purpose**: Serve AI models for inference via a WebSocket API, supporting audio (`minicpm-o_2_6`) and causal language models (`codellama-13b`).
-- **Environment**: Ubuntu server with Python 3.12.3 (host), CUDA 12.4, NVIDIA driver 550.144.03, Docker 28.1.1.
-- **Deployment**: Dockerized using `docker-compose.yml` and a `Dockerfile` with Python 3.10 (Ubuntu 22.04).
+- **Environment**: Linux with Python 3.10 (container), CUDA, NVIDIA GPU, Docker.
+- **Deployment**: Dockerized using `docker-compose.yml` and a `Dockerfile`.
 - **Key Features**:
   - Model weights stored externally and linked via symlinks to `./storage`.
   - No-cloud policy: Local model weights and dependencies.
-  - Git integration with SSH authentication (`git@github.com:kaseyq/model-service.git`).
+  - Git integration with SSH authentication.
 
 ## File Structure and Purpose
 | File/Directory | Purpose |
@@ -28,41 +28,41 @@ This project implements a WebSocket-based TCP server for AI model inference, sup
 | `adapters/base_adapter.py` | Base class for model adapters. |
 | `adapters/causal_lm_adapter.py` | Adapter for causal language models (`codellama-13b`). |
 | `adapters/minicpmo_model_adapter.py` | Adapter for audio models (`minicpm-o_2_6`). |
-| `storage/` | Directory for volume mounts (ignored in Git), containing symlinks (e.g., `./storage/minicpm-o_2_6` → `/home/kaseyq/projects/repos/MiniCPM-o-2_6`). |
+| `storage/` | Directory for volume mounts (ignored in Git), containing symlinks to model weights. |
 | `venv/` | Host virtual environment (optional, ignored in Git). |
 | `setup.log` | Log file for `setup.sh` output (ignored in Git). |
 
 ## Prerequisites
-- **Hardware**: NVIDIA GPU (e.g., RTX 3090, 24 GB VRAM), 64 GB RAM.
+- **Hardware**: NVIDIA GPU with sufficient VRAM, adequate system memory.
 - **Software**:
-  - Ubuntu (host) with Python 3.12.3.
-  - Docker 28.1.1 with NVIDIA Docker runtime.
+  - Linux host with Python 3.x.
+  - Docker with NVIDIA Docker runtime.
   - Git for repository management.
-  - CUDA 12.4, NVIDIA driver 550.144.03.
-- **Dependencies**: Model weights stored locally (e.g., `/home/kaseyq/projects/repos/MiniCPM-o-2_6`).
+  - CUDA and compatible NVIDIA driver.
+- **Dependencies**: Model weights stored locally in an external directory.
 
 ## Setup Instructions
 ### 1. Clone the Repository
 Clone the project using SSH:
 ```bash
-git clone git@github.com:kaseyq/model-service.git
+git clone <repository-url>
 cd model-service
 ```
 
 ### 2. Configure Git
 Set your Git user details:
 ```bash
-git config user.name "Kasey Quanrud"
-git config user.email "kasey@kaseyquanrud.com"
+git config user.name "<your-name>"
+git config user.email "<your-email>"
 ```
 
 ### 3. Set Up Symlinks for Model Weights
 Link model weights to `./storage`:
 ```bash
 mkdir -p ./storage
-ln -s /home/kaseyq/projects/repos/MiniCPM-o-2_6 ./storage/minicpm-o_2_6
+ln -s /path/to/minicpm-o-2_6 ./storage/minicpm-o_2_6
 # For codellama-13b (if available):
-# ln -s /path/to/CodeLlama-13b ./storage/codellama-13b
+# ln -s /path/to/codellama-13b ./storage/codellama-13b
 ```
 Verify:
 ```bash
@@ -177,7 +177,7 @@ Logs are written to `./storage/model_server.log`.
     ```
   - Adjust permissions:
     ```bash
-    chmod -R 755 /home/kaseyq/projects/repos/MiniCPM-o-2_6
+    chmod -R 755 /path/to/minicpm-o_2_6
     ```
 
 ### Port Conflicts
@@ -194,15 +194,15 @@ Logs are written to `./storage/model_server.log`.
 ### Residual Processes
 - Kill stalled `systemctl` processes:
   ```bash
-  sudo kill -9 473464 473465 473466 475475 475476 475477
+  sudo kill -9 <pid-list>
   ps aux | grep model-service
   ```
 
 ## Notes
-- **Python Version**: Host uses Python 3.12.3; container uses Python 3.10 (Ubuntu 22.04). Dependencies are compatible.
-- **Symlinks**: Model weights are linked (e.g., `./storage/minicpm-o_2_6` → `/home/kaseyq/projects/repos/MiniCPM-o-2_6`) to avoid duplication (~16.5 GB).
+- **Python Version**: Container uses Python 3.10 (Ubuntu 22.04). Dependencies are compatible.
+- **Symlinks**: Model weights are linked (e.g., `./storage/minicpm-o_2_6` → external path) to avoid duplication.
 - **No-Cloud Policy**: Local weights and dependencies ensure offline operation.
-- **Git**: Repository (`git@github.com:kaseyq/model-service.git`) excludes `storage/`, `venv/`, and `setup.log`.
+- **Git**: Repository excludes `storage/`, `venv/`, and `setup.log`.
 - **setup.sh**: Useful for host-side setup (directories, symlinks, permissions, system checks), kept unchanged for reference.
 - **clean.sh**: Resets host environment by removing `venv` and `setup.log`.
 
