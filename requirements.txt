@@ -1,0 +1,5 @@
+torch==2.0.1
+numpy>=1.21.0
+pyyaml>=5.4.1
+transformers>=4.31.0
+bitsandbytes>=0.39.0
