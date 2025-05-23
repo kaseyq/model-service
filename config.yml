@@ -1,15 +1,25 @@
+host: "0.0.0.0"
+port: 9999
+timeout: 300.0
+api_version: 1
+min_vram_needed: 5000000000  # 5 GB
+max_data_size: 524288000  # 500 MB
+truncate_log:
+  base64_max_length: 50
+  other_max_length: 200
+  max_total: 1000
 models:
-  - model_config_id: minicpm-o-2_6
-    model_name: Openbmb/MiniCPM-o-2_6
+  - model_config_id: minicpm-o_2_6
+    model_name: Openbmb/MiniCPM-o_2_6
     type: audio
     device: cuda:0
     torch_dtype: bfloat16
-    local_path: ./minicpm-o-2_6
-    adapter_class: AudioModelAdapter
+    local_path: ./storage/models/minicpm-o_2_6
+    adapter_class: MiniCPMoModelAdapter
   - model_config_id: codellama-13b
     model_name: codellama/CodeLlama-13b-hf
     type: causal_lm
     device: cuda:0
     load_in_4bit: true
-    local_path: ./codellama-13b
+    local_path: ./storage/models/codellama-13b
     adapter_class: CausalLMAdapter

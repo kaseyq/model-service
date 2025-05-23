@@ -1,40 +1,41 @@
 services:
-  model_server:
-    container_name: model-service
-    build:
-      context: .
-      dockerfile: Dockerfile
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=0
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
-    volumes:
-      - .:/app
-      - ./storage/minicpm-o_2_6:/app/minicpm-o_2_6
-      - ./storage/codellama-13b:/app/codellama-13b
-      - ./storage/huggingface_cache:/root/.cache/huggingface
-      - ./storage/file_storage:/app/file_storage
-      - ./storage/tmp:/tmp
-      - ./storage/model_server.log:/app/model_server.log
-      - type: tmpfs
-        target: /tmp/cache
-        tmpfs:
-          size: 1000000000
-    ports:
-      - "9999:9999"
-    dns: 8.8.8.8
-    restart: unless-stopped
-    stop_grace_period: 5s
-    shm_size: 40gb
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    model_server:
+      container_name: model-service
+      build:
+        context: .
+        dockerfile: Dockerfile
+      runtime: nvidia
+      environment:
+        - NVIDIA_VISIBLE_DEVICES=0
+        - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+      volumes:
+        - .:/app
+        - ./storage:/app/storage
+        #- ./storage/minicpm-o_2_6:/app/storage/minicpm-o_2_6
+        #- ./storage/codellama-13b:/app/storage/codellama-13b
+        #- ./storage/huggingface_cache:/root/.cache/huggingface
+        #- ./storage/file_storage:/app/storage/file_storage
+        #- ./storage/tmp:/tmp
+        #- ./storage/logs:/app/storage/logs
+        - type: tmpfs
+          target: /tmp/cache
+          tmpfs:
+            size: 1000000000
+      ports:
+        - "9999:9999"
+      dns: 8.8.8.8
+      restart: unless-stopped
+      stop_grace_period: 5s
+      shm_size: 40gb
+      deploy:
+        resources:
+          reservations:
+            devices:
+              - driver: nvidia
+                count: 1
+                capabilities: [gpu]
+      logging:
+        driver: json-file
+        options:
+          max-size: "10m"
+          max-file: "3"

@@ -19,3 +19,7 @@ __pycache__/
 # Temporary files
 *.tmp
 *.swp
+
+# Dev Environment
+docker-compose-dev.yml
+compiled_sources.txt
