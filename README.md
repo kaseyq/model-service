@@ -1,14 +1,18 @@
-Model Service
-A socket-based model server with adapters for specific AI models, supporting client or console input. Deployable via virtual environment (venv) or Docker. Hosted at https://github.com/kaseyq/model-service.
-Features
+# Model Service
 
-Socket-based TCP server for AI model inference
-Adapters for models like MiniCPM-o_2_6 (audio) and CodeLlama-13b (causal LM)
-Command-line interface for model management (load, unload, list, status)
-Supports venv or Docker deployment
-Configurable model storage for HuggingFace and local models
+A socket-based model server with adapters for specific AI models, supporting client or console input. Deployable via virtual environment (venv) or Docker. Hosted at [https://github.com/kaseyq/model-service](https://github.com/kaseyq/model-service).
 
-Directory Structure
+## Features
+
+- Socket-based TCP server for AI model inference
+- Adapters for models like MiniCPM-o_2_6 (audio) and CodeLlama-13b (causal LM)
+- Command-line interface for model management (load, unload, list, status)
+- Supports venv or Docker deployment
+- Configurable model storage for HuggingFace and local models
+
+## Directory Structure
+
+```
 model-service/
 ├── config.yml               # Server and model configuration
 ├── docker-compose.yml       # Docker Compose for production
@@ -38,88 +42,103 @@ model-service/
 │   ├── minicpm-o_2_6/
 │   ├── models/
 │   ├── tmp/
+```
 
-Setup
-Prerequisites
+## Setup
 
-Python 3.8+ (for venv)
-Docker and Docker Compose (for Docker)
-Git
-CUDA-capable GPU with at least 5 GB VRAM (for model inference)
+### Prerequisites
 
-Virtual Environment Setup
+- Python 3.8+ (for venv)
+- Docker and Docker Compose (for Docker)
+- Git
+- CUDA-capable GPU with at least 5 GB VRAM (for model inference)
 
-Clone the repository:
-git clone https://github.com/kaseyq/model-service.git
-cd model-service
+### Virtual Environment Setup
 
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/kaseyq/model-service.git
+   cd model-service
+   ```
 
-Create and activate a virtual environment:
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+2. Create and activate a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Install dependencies:
-pip install -r requirements.txt
+### Docker Setup
 
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/kaseyq/model-service.git
+   cd model-service
+   ```
 
+2. Build and run with Docker Compose:
+   ```bash
+   docker-compose up --build
+   ```
 
-Docker Setup
+   For development:
+   ```bash
+   docker-compose -f docker-compose-dev.yml up --build
+   ```
 
-Clone the repository:
-git clone https://github.com/kaseyq/model-service.git
-cd model-service
+## Usage
 
+### Running the Server
 
-Build and run with Docker Compose:
-docker-compose up --build
+- **Virtual Environment**:
+  Start the server with an optional model config ID (e.g., `minicpm-o_2_6` or `codellama-13b`):
+  ```bash
+  python __main__.py --model-config-id minicpm-o_2_6
+  ```
+  Defaults to the first model in `config.yml` if unspecified.
 
-For development:
-docker-compose -f docker-compose-dev.yml up --build
+- **Docker**:
+  Server starts automatically with `docker-compose up`, loading the default model.
 
+The server runs on `0.0.0.0:9999` by default (configurable in `config.yml`).
 
+### Interacting with the Server
 
-Usage
-Running the Server
+- **Command-Line Interface**:
+  Manage models interactively (requires terminal):
+  ```bash
+  python src/command_line_interface.py
+  ```
+  Available commands:
+  - `load <model_config_id>`: Load a model (e.g., `load minicpm-o_2_6`)
+  - `unload`: Unload the current model
+  - `list`: Show available and current models
+  - `status`: Display server health, current model, VRAM usage, and uptime
+  - `exit`: Shut down the server
 
-Virtual Environment:Start the server with an optional model config ID (e.g., minicpm-o_2_6 or codellama-13b):
-python __main__.py --model-config-id minicpm-o_2_6
+- **Client Interaction**:
+  Connect via a TCP socket client to `0.0.0.0:9999`. Request handling details are in `src/model_request_handler.py`.
 
-Defaults to the first model in config.yml if unspecified.
+### Model Compilation
 
-Docker:Server starts automatically with docker-compose up, loading the default model.
-
-
-The server runs on 0.0.0.0:9999 by default (configurable in config.yml).
-Interacting with the Server
-
-Command-Line Interface:Manage models interactively (requires terminal):
-python src/command_line_interface.py
-
-Available commands:
-
-load <model_config_id>: Load a model (e.g., load minicpm-o_2_6)
-unload: Unload the current model
-list: Show available and current models
-status: Display server health, current model, VRAM usage, and uptime
-exit: Shut down the server
-
-
-Client Interaction:Connect via a TCP socket client to 0.0.0.0:9999. Request handling details are in src/model_request_handler.py.
-
-
-Model Compilation
 To compile specific AI model file contents:
+```bash
 ./util/compile-scoped.sh [file_path ...]
+```
 
-Configuration
-Edit config.yml to adjust:
+## Configuration
 
-Server settings (host, port, timeout, api_version)
-Model configurations (e.g., minicpm-o_2_6, codellama-13b)
-Device settings (cuda:0), data types (bfloat16, 4bit), and local model paths
+Edit `config.yml` to adjust:
+- Server settings (`host`, `port`, `timeout`, `api_version`)
+- Model configurations (e.g., `minicpm-o_2_6`, `codellama-13b`)
+- Device settings (`cuda:0`), data types (`bfloat16`, `4bit`), and local model paths
 
 Example model entry:
+```yaml
 models:
   - model_config_id: minicpm-o_2_6
     model_name: Openbmb/MiniCPM-o_2_6
@@ -128,9 +147,14 @@ models:
     torch_dtype: bfloat16
     local_path: ./storage/models/minicpm-o_2_6
     adapter_class: MiniCPMoModelAdapter
+```
 
-Ensure the storage/ directory contains model weights and cached data.
-Contributing
-Contributions are welcome! Open an issue or submit a pull request on GitHub.
-License
-MIT License. See LICENSE file.
+Ensure the `storage/` directory contains model weights and cached data.
+
+## Contributing
+
+Contributions are welcome! Open an issue or submit a pull request on [GitHub](https://github.com/kaseyq/model-service).
+
+## License
+
+MIT License. See [LICENSE](LICENSE) file.
