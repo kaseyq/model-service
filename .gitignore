@@ -23,3 +23,5 @@ __pycache__/
 # Dev Environment
 docker-compose-dev.yml
 compiled_sources.txt
+compiled-overview.txt
+compiled-scoped.txt

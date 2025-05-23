@@ -1,0 +1,3 @@
+Socket based model server with adapters for specific AI models. Allows a client or console input to use. Allows either venv console or docker img. git project https://github.com/kaseyq/model-service
+
+((( AI MODELS FOR SPECIFIC FILE CONTENTS RETURN: ./util/compile-scoped.sh [file_path ...] )))
