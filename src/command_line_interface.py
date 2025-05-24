@@ -3,7 +3,6 @@ import sys
 import torch
 from src.model_manager import ModelManager
 import time
-#, MODEL_LOOKUP, current_model_id, current_adapter, server_state, busy_reason, model_lock
 
 logger = logging.getLogger(__name__)
 server_start_time = time.time()

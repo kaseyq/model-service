@@ -15,6 +15,9 @@ class CausalLMAdapter(ModelServiceAdapter):
         start_time = time.time()
         try:
             logger.info(f"Loading causal LM: {self.config['model_config_id']} ({self.config['model_name']})")
+            logger.info(f"Config: {self.config}")
+            logger.info(f"load_in_4bit: {self.config.get('load_in_4bit', False)}")
+            logger.info(f"Loading causal LM: {self.config['model_config_id']} ({self.config['model_name']})")
             device_index = int(self.config['device'].split(':')[-1]) if 'cuda' in self.config['device'] else 0
             _, vram_used, vram_available = self._check_vram(device_index)
             
@@ -34,21 +37,52 @@ class CausalLMAdapter(ModelServiceAdapter):
                 )
 
             local_exists = os.path.exists(self.config['local_path'])
-            logger.info("Loading model directly...")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.config['local_path'] if local_exists else self.config['model_name'],
-                quantization_config=quantization_config,  # Pass quantization config
-                device_map="auto",  # Let accelerate handle device placement
-                torch_dtype=torch.float16 if not quantization_config else None,  # Use float16 for non-quantized models
-                local_files_only=local_exists
-            )
-            logger.info("Model loaded, loading tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.config['local_path'] if local_exists else self.config['model_name'],
-                local_files_only=local_exists
-            )
-            logger.info("Tokenizer loaded")
-            self._save_model_locally()
+            #logger.info("Loading model directly...")
+            #self.model = AutoModelForCausalLM.from_pretrained(
+            #    self.config['local_path'] if local_exists else self.config['model_name'],
+            #    quantization_config=quantization_config,  # Pass quantization config
+            #    device_map="auto",  # Let accelerate handle device placement
+            #    torch_dtype=torch.float16 if not quantization_config else None,  # Use float16 for non-quantized models
+            #    local_files_only=local_exists
+            #)
+
+            #tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+            #tokenizer.save_pretrained(DUMP_PATH + MODEL_NAME)
+            #model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, force_download=True)
+            #model.save_pretrained(DUMP_PATH + MODEL_NAME)
+            
+            if local_exists != True:
+                logger.info("Loading model...")
+                self.model = AutoModelForCausalLM.from_pretrained(self.config['local_path'])
+                #    self.config['model_name'])
+                #    quantization_config=quantization_config,  # Pass quantization config
+                #)
+                #    device_map="auto",  # Let accelerate handle device placement
+                
+                #    torch_dtype=torch.float16 if not quantization_config else None,  # Use float16 for non-quantized models
+                #    local_files_only=local_exists
+
+
+                logger.info("Model loaded, loading tokenizer...")
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.config['local_path'],
+                    #self.config['model_name'],
+                    local_files_only=False)
+
+                logger.info("Tokenizer loaded")
+                self._save_model_locally()
+            else:
+                logger.info("Loading model...") 
+                self.model = AutoModelForCausalLM.from_pretrained(self.config['local_path'], local_files_only=True)
+                logger.info("Model loaded, loading tokenizer...")
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.config['local_path'],
+                    local_files_only=True)
+                logger.info("Tokenizer loaded")
+
+
+            self.model = self.model.eval().to(device=self.config['device'])
+
 
             torch.cuda.synchronize(device_index)
             vram_used = torch.cuda.memory_allocated(device_index) / 1e9
@@ -104,3 +138,21 @@ class CausalLMAdapter(ModelServiceAdapter):
                 'message': f"Prompt processing failed: {str(e)}",
                 'result': {}
             }
+
+    def _save_model_locally(self):
+         if not os.path.exists(self.config['local_path']):
+             os.makedirs(self.config['local_path'])
+         # Create a clean quantization_config dictionary
+         if hasattr(self.model, 'config') and hasattr(self.model.config, 'quantization_config'):
+             quant_config = self.model.config.quantization_config
+             clean_quant_config = {
+                 'load_in_4bit': getattr(quant_config, 'load_in_4bit', False),
+                 'bnb_4bit_compute_dtype': str(getattr(quant_config, 'bnb_4bit_compute_dtype', 'float16')),
+                 'bnb_4bit_quant_type': getattr(quant_config, 'bnb_4bit_quant_type', 'nf4'),
+                 'bnb_4bit_use_double_quant': getattr(quant_config, 'bnb_4bit_use_double_quant', False)
+             }
+             self.model.config.quantization_config = clean_quant_config
+         logger.info(f"Saving model to local path: {self.config['local_path']}")
+         self.model.save_pretrained(self.config['local_path'])
+         self.tokenizer.save_pretrained(self.config['local_path'])
+         logger.info("Model and tokenizer saved")

@@ -1,6 +1,8 @@
 import json
 import logging
 import socketserver
+import time
+import torch
 from typing import Dict, Any
 from src.model_manager import ModelManager
 from src.common.logging_utils import truncate_log
@@ -8,7 +10,6 @@ from src.common.logging_utils import truncate_log
 logger = logging.getLogger(__name__)
 
 class ModelRequestHandler(socketserver.BaseRequestHandler):
-
     """Handle client requests for model tasks."""
     def handle(self):
         try:
@@ -75,7 +76,7 @@ class ModelRequestHandler(socketserver.BaseRequestHandler):
                                 "message": f"Invalid model_config_id: {model_config_id}"
                             })
                         else:
-                            success = load_model(model_config_id, ModelManager.config['timeout'])
+                            success = ModelManager.load(model_config_id, ModelManager.config['timeout'])  # Fixed: Changed load_model to ModelManager.load
                             response_data.update({
                                 "server_state": ModelManager.server_state,
                                 "model_config_id": ModelManager.current_model_id,
@@ -89,7 +90,6 @@ class ModelRequestHandler(socketserver.BaseRequestHandler):
                                 "message": f"Cannot unload {model_config_id}; current model is {ModelManager.current_model_id or 'none'}"
                             })
                         else:
-                            #global server_state, busy_reason
                             ModelManager.server_state = "busy"
                             ModelManager.busy_reason = f"unloading model {model_config_id}"
                             logger.info(f"Server state: {ModelManager.server_state} due to {ModelManager.busy_reason}")
@@ -189,9 +189,7 @@ class ModelRequestHandler(socketserver.BaseRequestHandler):
                             "message": f"Invalid task: {task}"
                         })
 
-            # Log truncated response data before serialization
             logger.info(f"Response data: {truncate_log(response_data)}")
-            # Serialize to JSON and send
             response_json = json.dumps(response_data)
             logger.info(f"Raw sent data length: {len(response_json)}")
             self.request.sendall(response_json.encode('utf-8'))
@@ -199,7 +197,6 @@ class ModelRequestHandler(socketserver.BaseRequestHandler):
 
         except Exception as e:
             logger.error(f"Error processing request: {str(e)}", exc_info=True)
-            #global server_state, busy_reason
             ModelManager.server_state = "error"
             ModelManager.busy_reason = None
             response_data = {

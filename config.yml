@@ -13,6 +13,7 @@ models:
     model_name: Openbmb/MiniCPM-o_2_6
     type: audio
     device: cuda:0
+    load_in_4bit: false
     torch_dtype: bfloat16
     local_path: ./storage/models/minicpm-o_2_6
     adapter_class: MiniCPMoModelAdapter
@@ -21,5 +22,5 @@ models:
     type: causal_lm
     device: cuda:0
     load_in_4bit: true
-    local_path: ./storage/models/codellama-13b
+    local_path: ./storage/models/CodeLlama-13b-hf
     adapter_class: CausalLMAdapter
