@@ -12,37 +12,44 @@ class CausalLMAdapter(ModelServiceAdapter):
     """Adapter for causal language models (e.g., CodeLlama)."""
     async def load(self, timeout: float = 1200.0) -> bool:
         """Load causal LM with device verification."""
-        success = await self.load_model(AutoModelForCausalLM, AutoTokenizer, timeout)
-        if success:
-            device_map = self.createDeviceMap()
-            logger.info("Verifying model parameter devices...")
-            for name, param in self.model.named_parameters():
-                if param.device.type == 'cpu':
-                    logger.warning(f"Parameter {name} is on CPU, moving to device_map")
-                    device = device_map.get(name, 'cuda:0')
-                    param.data = param.data.to(device)
-            for i in range(len(self.model.model.layers)):
-                rotary_emb = self.model.model.layers[i].self_attn.rotary_emb
-                try:
-                    module_device = next(rotary_emb.parameters()).device if list(rotary_emb.parameters()) else 'unknown'
-                    logger.info(f"Layer {i} rotary_emb module device: {module_device}")
-                    if i <= 5:
-                        rotary_emb.to('cuda:1')
-                        logger.info(f"Moved layer {i} rotary_emb to cuda:1")
-                    else:
-                        rotary_emb.to('cuda:0')
-                        logger.info(f"Moved layer {i} rotary_emb to cuda:0")
-                except (AttributeError, StopIteration):
-                    logger.warning(f"Layer {i} rotary_emb has no parameters or device info, skipping")
-                if hasattr(rotary_emb, 'inv_freq'):
-                    logger.info(f"Layer {i} rotary_emb.inv_freq device: {rotary_emb.inv_freq.device}")
-                    if rotary_emb.inv_freq.device.type == 'cpu':
-                        logger.warning(f"Layer {i} rotary_emb.inv_freq on CPU, moving to cuda:1")
-                        rotary_emb.inv_freq = rotary_emb.inv_freq.to('cuda:1')
-            logger.info("Model parameter and module device verification complete")
-            if self.tokenizer:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
-        return success
+        try:
+            logger.info(f"Loading CausalLM model: {self.config['model_config_id']} ({self.config['model_name']})")
+            # Debug device map before loading
+            device_map = self.create_device_map()
+            logger.debug(f"Device map for {self.config['model_config_id']}: {device_map}")
+            success = await self.load_model_internal(AutoModelForCausalLM, AutoTokenizer, timeout)
+            if success:
+                logger.info("Verifying model parameter devices...")
+                for name, param in self.model.named_parameters():
+                    if param.device.type == 'cpu':
+                        logger.warning(f"Parameter {name} is on CPU, moving to device_map")
+                        device = device_map.get(name, 'cuda:0')
+                        param.data = param.data.to(device)
+                for i in range(len(self.model.model.layers)):
+                    rotary_emb = self.model.model.layers[i].self_attn.rotary_emb
+                    try:
+                        module_device = next(rotary_emb.parameters()).device if list(rotary_emb.parameters()) else 'unknown'
+                        logger.info(f"Layer {i} rotary_emb module device: {module_device}")
+                        if i <= 5:
+                            rotary_emb.to('cuda:1')
+                            logger.info(f"Moved layer {i} rotary_emb to cuda:1")
+                        else:
+                            rotary_emb.to('cuda:0')
+                            logger.info(f"Moved layer {i} rotary_emb to cuda:0")
+                    except (AttributeError, StopIteration):
+                        logger.warning(f"Layer {i} rotary_emb has no parameters or device info, skipping")
+                    if hasattr(rotary_emb, 'inv_freq'):
+                        logger.info(f"Layer {i} rotary_emb.inv_freq device: {rotary_emb.inv_freq.device}")
+                        if rotary_emb.inv_freq.device.type == 'cpu':
+                            logger.warning(f"Layer {i} rotary_emb.inv_freq on CPU, moving to cuda:1")
+                            rotary_emb.inv_freq = rotary_emb.inv_freq.to('cuda:1')
+                logger.info("Model parameter and module device verification complete")
+                if self.tokenizer:
+                    self.tokenizer.pad_token = self.tokenizer.eos_token
+            return success
+        except Exception as e:
+            logger.error(f"Failed to load CausalLM model: {str(e)}", exc_info=True)
+            return False
 
     async def handle_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Handle text generation request with Llama-specific patching."""
@@ -54,6 +61,7 @@ class CausalLMAdapter(ModelServiceAdapter):
                 raise ValueError("Prompt input required")
 
             if not torch.cuda.is_available():
+                logger.error("CUDA not available")
                 raise RuntimeError("CUDA not available")
 
             inputs = self.tokenizer(prompt, return_tensors="pt")
@@ -74,7 +82,7 @@ class CausalLMAdapter(ModelServiceAdapter):
             logger.info(f"Input sequence length: {seq_length}")
 
             self.model.eval()
-            for device in self.createDeviceMap().values():
+            for device in self.create_device_map().values():
                 torch.cuda.synchronize(device)
 
             def patched_rotary_emb_forward(self, hidden_states, position_ids):

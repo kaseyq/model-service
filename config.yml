@@ -4,6 +4,9 @@ http_port: 8000
 timeout: 300.0
 client_socket_timeout: 90
 api_version: 1
+min_vram_needed: 
+  cuda:0: 0
+  cuda:1: 5000000000  # 5 GB
 max_data_size: 524288000
 models:
   - model_config_id: minicpm-o_2_6

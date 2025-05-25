@@ -43,9 +43,9 @@ class ModelServiceAdapter(ABC):
     def check_vram_requirements(self) -> bool:
         """Verify if available VRAM meets minimum requirements."""
         global_config = load_config()
-        max_memory_config = self.config.get('max_memory', {})
-        min_vram_needed_config = global_config.get('min_vram_needed', {})
-        default_min_vram = self.config.get('min_vram_needed', 10.0)
+        max_memory_config = self.config['parameters'].get('max_memory', {})
+        min_vram_needed_config = global_config.get('min_vram_needed', {})        
+        default_min_vram = 0
 
         if max_memory_config:
             for device in max_memory_config:
@@ -63,9 +63,9 @@ class ModelServiceAdapter(ABC):
                 return False
         return True
 
-    def createDeviceMap(self) -> Dict[str, Any]:
+    def create_device_map(self) -> Dict[str, Any]:
         """Build device map from config for model components."""
-        device_map_config = self.config.get('device_map', {})
+        device_map_config = self.config["parameters"].get('device_map', {})
         if not device_map_config:
             device_id = int(self.device.split(":")[1]) if ":" in self.device else self.device
             return {'': device_id}
@@ -84,31 +84,35 @@ class ModelServiceAdapter(ABC):
                 device_id = int(device.split(":")[1]) if ":" in device else device
                 for i in range(start, end + 1):
                     device_map[f"model.layers.{i}"] = device_id
+                    # Include submodules for Llama
                     device_map[f"model.layers.{i}.input_layernorm"] = device_id
                     device_map[f"model.layers.{i}.post_attention_layernorm"] = device_id
                     device_map[f"model.layers.{i}.self_attn"] = device_id
+                    device_map[f"model.layers.{i}.self_attn.rotary_emb"] = device_id
                     device_map[f"model.layers.{i}.mlp"] = device_id
             except ValueError as e:
                 logger.error(f"Invalid device_map layer range {layer_range}: {e}")
                 raise ValueError(f"Invalid device_map configuration: {e}")
+        logger.debug(f"Created device map: {device_map}")
         return device_map
 
-    async def load_model(self, model_class: Any, tokenizer_class: Any = None, timeout: float = 1200.0) -> bool:
+    async def load_model_internal(self, model_class: Any, tokenizer_class: Any = None, timeout: float = 1200.0) -> bool:
         """Load model and optional tokenizer/processor with common steps."""
         try:
             if not self.check_vram_requirements():
                 return False
 
             local_exists = os.path.exists(self.config['local_path'])
-            device_map = self.createDeviceMap()
+            device_map = self.create_device_map()
             max_memory = self.config.get('max_memory', {})
+            logger.debug(f"Loading model with device_map: {device_map}, max_memory: {max_memory}")
 
             logger.info(f"Loading model: {self.config['model_config_id']} ({self.config['model_name']})")
             self.model = model_class.from_pretrained(
                 self.config['local_path'] if local_exists else self.config['model_name'],
                 torch_dtype=self.config.get('parameters', {}).get('torch_dtype', torch.float16),
                 device_map=device_map,
-                max_memory=max_memory,
+                max_memory={int(k.split(':')[1]) if ':' in k else k: v for k, v in max_memory.items()},
                 trust_remote_code=True,
                 low_cpu_mem_usage=True,
                 local_files_only=local_exists
@@ -117,7 +121,6 @@ class ModelServiceAdapter(ABC):
 
             if tokenizer_class:
                 logger.info("Loading tokenizer/processor...")
-                # Handle CLIPProcessor with slow_image_processor_class
                 if 'CLIPProcessor' in str(tokenizer_class):
                     self.tokenizer = tokenizer_class.from_pretrained(
                         self.config['local_path'] if local_exists else self.config['model_name'],
@@ -189,7 +192,6 @@ class ModelServiceAdapter(ABC):
             model_id = self.config.get('model_config_id', 'unknown')
             logger.info(f"Unloading model {model_id}")
             if self.model is not None:
-                # Explicitly delete model to release references
                 del self.model
                 self.model = None
             if self.tokenizer is not None:
@@ -197,15 +199,10 @@ class ModelServiceAdapter(ABC):
                 self.tokenizer = None
             if 'cuda' in self.device:
                 device_index = int(self.device.split(':')[-1]) if ':' in self.device else 0
-                # Force garbage collection
                 gc.collect()
-                # Clear CUDA memory cache
                 torch.cuda.empty_cache()
-                # Reset peak memory stats
                 torch.cuda.reset_peak_memory_stats(device_index)
-                # Synchronize to ensure all operations complete
                 torch.cuda.synchronize(device_index)
-                # Log VRAM after cleanup
                 await self._log_vram_status(device_index)
         except Exception as e:
             logger.error(f"Error during unload of model {self.config.get('model_config_id', 'unknown')}: {str(e)}", exc_info=True)
