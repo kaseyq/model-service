@@ -38,11 +38,14 @@ def run_server(startup_model_id: str = None):
 
     config = load_yaml([PathUtil.get_path("config.yml"), PathUtil.get_path("config.yaml")])
 
-    if startup_model_id and startup_model_id in config['models']:
+    if startup_model_id:
         logger.info(f"Attempting to load startup model: {startup_model_id}")
+        ModelManager.load(startup_model_id, config['timeout'])
+
+    #if startup_model_id and startup_model_id in config['models']:
         #if not ModelRequestHandler.load_model(startup_model_id, config['timeout']):
         #    logger.warning(f"Failed to load startup model {startup_model_id}; falling back to index 0")
-        ModelManager.load(config['models'][0]['model_config_id'], config['timeout'])
+        #ModelManager.load(config['models'][0]['model_config_id'], config['timeout'])
     else:
         logger.info(f"Loading default model at index 0: {config['models'][0]['model_config_id']}")
         ModelManager.load(config['models'][0]['model_config_id'], config['timeout'])

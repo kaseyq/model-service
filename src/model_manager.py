@@ -8,7 +8,7 @@ from src.common.file_utils import load_yaml
 from src.common.path_utils import PathUtil
 from src.adapters.causal_lm_adapter import CausalLMAdapter
 from src.adapters.minicpmo_model_adapter import MiniCPMoModelAdapter
-
+from src.common.config_utils import load_config
 
 logger = logging.getLogger(__name__)
 class ModelManager():
@@ -20,7 +20,8 @@ class ModelManager():
     busy_reason = None  # Track reason for busy state
     server_start_time = time.time()
     
-    config = load_yaml([PathUtil.get_path("config.yml"), PathUtil.get_path("config.yaml")])
+    config = load_config()
+    #config = load_yaml([PathUtil.get_path("config.yml"), PathUtil.get_path("config.yaml")])
     API_VERSION = config['api_version']
     MODEL_REGISTRY = config['models']
     MODEL_LOOKUP = {cfg['model_config_id']: cfg for cfg in MODEL_REGISTRY}
