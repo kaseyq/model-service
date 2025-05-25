@@ -22,7 +22,7 @@ rm -f "$OUTPUT_FILE"
 echo "Compiled Sources:" >> "$OUTPUT_FILE"
 
 # Find .py, .yml, .yaml, requirements.txt, Dockerfile*, requirements_docker.txt, and project-description.txt files, excluding specified directories, and append to compiled_sources.txt
-find . -type f \( -name "*.py" -o -name "*.yml" -o -name "*.yaml" -o \( -name "requirements.txt" -path "./requirements.txt" \) -o -name "Dockerfile*" -o -name "requirements_docker.txt" -o -name "project-description.txt" \) -not -path "./storage/*" -not -path "./venv/*" -not -path "./.git/*" -not -path "./.venv/*" -not -path "./__pycache__/*" -exec sh -c 'echo "File: {}"; cat "{}"; echo ""' \; > compiled_sources.txt
+find . -type f \( -name "*.py" -o -name "*.yml" -o -name "*.yaml" -o \( -name "requirements.txt" -path "./requirements.txt" \) -o -name "Dockerfile*" -o -name "requirements_docker.txt" -o -name "project-description.txt" \) -not -path "./storage/*" -not -path "./tests/*" -not -path "./venv/*" -not -path "./.git/*" -not -path "./.venv/*" -not -path "./__pycache__/*" -exec sh -c 'echo "File: {}"; cat "{}"; echo ""' \; > compiled_sources.txt
 
 
 echo "" >> "$OUTPUT_FILE"

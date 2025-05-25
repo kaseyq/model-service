@@ -19,3 +19,4 @@ vocos==0.1.0
 Pillow==10.4.0
 nvidia-ml-py>=12.555.43
 accelerate==1.7.0
+uvicorn==0.34.2

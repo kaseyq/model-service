@@ -1,39 +1,49 @@
 host: "0.0.0.0"
 port: 9999
-timeout: 300.0  # Server-side timeout (e.g., for model loading)
-client_socket_timeout: 90  # Client-side socket timeout in seconds
+http_port: 8000
+timeout: 300.0
+client_socket_timeout: 90
 api_version: 1
-min_vram_needed: 
-  cuda:0:0
-  cuda:1:5000000000  # 5 GB
-max_data_size: 524288000  # 500 MB
-truncate_log:
-  base64_max_length: 50
-  other_max_length: 200
-  max_total: 1000
+max_data_size: 524288000
 models:
   - model_config_id: minicpm-o_2_6
     model_name: Openbmb/MiniCPM-o_2_6
     type: audio
+    input_types: ['text/plain', 'audio/wav']
+    output_types: ['audio/wav']
     device: cuda:0
-    load_in_4bit: false
-    torch_dtype: bfloat16
     local_path: ./storage/models/minicpm-o_2_6
     adapter_class: MiniCPMoModelAdapter
+    parameters:
+      torch_dtype: bfloat16
+      attn_implementation: sdpa
+      load_in_4bit: true
   - model_config_id: codellama-13b
     model_name: codellama/CodeLlama-13b-hf
     type: causal_lm
-    device: cuda:0 # todo: use max_memory
-    device_map:
-      model.embed_tokens: cuda:1
-      model.norm: cuda:0
-      lm_head: cuda:0
-      layers:
-        0-5: cuda:1
-        6-39: cuda:0
-    max_memory:
-      cuda:0: 22GB
-      cuda:1: 5.5GB
-    load_in_4bit: false
+    input_types: ['text/plain']
+    output_types: ['text/plain']
+    device: cuda:0
     local_path: ./storage/models/CodeLlama-13b-hf
     adapter_class: CausalLMAdapter
+    parameters:
+      max_memory:
+        cuda:0: 22GB
+        cuda:1: 5.5GB
+      device_map:
+        model.embed_tokens: cuda:1
+        model.norm: cuda:0
+        lm_head: cuda:0
+        layers:
+          0-5: cuda:1
+          6-39: cuda:0
+  - model_config_id: clip-vision
+    model_name: openai/clip-vit-base-patch32
+    type: vision
+    input_types: ['image/jpeg', 'image/png']
+    output_types: ['application/json']
+    device: cuda:0
+    local_path: ./storage/models/clip-vit
+    adapter_class: CLIPVisionAdapter
+    parameters:
+      torch_dtype: float16

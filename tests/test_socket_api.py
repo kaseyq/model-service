@@ -1,11 +1,11 @@
 import unittest
 import json
-import socket
-import time
 import sys
 import os
+import asyncio
+from unittest.mock import patch, MagicMock
+from httpx import AsyncClient
 
-# Ensure project root is in sys.path for imports when running from tests/
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -14,103 +14,98 @@ from src.common.socket_utils import ModelServiceClient
 from src.common.file_utils import load_yaml
 from src.common.path_utils import PathUtil
 
-class TestModelServiceAPI(unittest.TestCase):
+class TestModelServiceAPI(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        """Set up the test client using server configuration from config.yml."""
         self.config = load_yaml([PathUtil.get_path("config.yml"), PathUtil.get_path("config.yaml")])
-        print(f"Loaded config: host={self.config['host']}, port={self.config['port']}, api_version={self.config['api_version']}")
         self.host = self.config['host']
         self.port = self.config['port']
         self.api_version = self.config['api_version']
-        
         self.client = ModelServiceClient(host=self.host, port=self.port, timeout=60)
-        print(f"Attempting to unload model to reset server state...")
-        self._unload_model()
-        print("Unload complete")
-        time.sleep(1)
+        self.http_client = AsyncClient(base_url=f"http://{self.host}:8000")
 
-    def tearDown(self):
-        """Clean up by unloading any loaded model."""
-        print("Tearing down: unloading model...")
-        self._unload_model()
-        print("Teardown complete")
+    async def asyncSetUp(self):
+        await self._unload_model()
 
-    def _unload_model(self):
-        """Helper method to unload the current model."""
-        # First, get the current model
+    async def asyncTearDown(self):
+        await self._unload_model()
+        await self.http_client.aclose()
+
+    async def _unload_model(self):
         status_request = {
             "version": self.api_version,
             "task": "status"
         }
         status_response = self.client.send_request(status_request)
-        print(f"Status response: {status_response}")
         current_model_id = status_response.get("model_config_id", None)
-        
         if current_model_id:
             unload_request = {
                 "version": self.api_version,
                 "task": "unload_model",
                 "model_config_id": current_model_id
             }
-            unload_response = self.client.send_request(unload_request)
-            print(f"Unload response for {current_model_id}: {unload_response}")
-        else:
-            print("No model loaded, skipping unload")
+            self.client.send_request(unload_request)
 
     def test_status(self):
-        """Test the 'status' task to retrieve server health and VRAM usage."""
         request = {
             "version": self.api_version,
             "task": "status"
         }
         response = self.client.send_request(request)
-        self.assertEqual(response["status"], "okay", f"Expected status 'okay', got {response}")
-        self.assertEqual(response["server_state"], "ready", f"Expected server_state 'ready', got {response['server_state']}")
-        self.assertIn("payload", response, "Response missing payload")
+        self.assertEqual(response["status"], "okay")
+        self.assertEqual(response["server_state"], "ready")
+        self.assertIn("payload", response)
         payload = response["payload"]
-        self.assertIn("health", payload, "Payload missing health")
-        self.assertIn("vram_usage", payload, "Payload missing vram_usage")
-        self.assertIn("uptime_seconds", payload, "Payload missing uptime_seconds")
-        self.assertGreaterEqual(payload["uptime_seconds"], 0, "Uptime should be non-negative")
+        self.assertIn("health", payload)
+        self.assertIn("vram_usage", payload)
+        self.assertIn("uptime_seconds", payload)
+        self.assertGreaterEqual(payload["uptime_seconds"], 0)
 
     def test_list_models(self):
-        """Test the 'list_models' task to retrieve available models."""
         request = {
             "version": self.api_version,
             "task": "list_models"
         }
         response = self.client.send_request(request)
-        self.assertEqual(response["status"], "okay", f"Expected status 'okay', got {response}")
-        self.assertIn("payload", response, "Response missing payload")
+        self.assertEqual(response["status"], "okay")
+        self.assertIn("payload", response)
         payload = response["payload"]
-        self.assertIn("models", payload, "Payload missing models")
-        self.assertIn("minicpm-o_2_6", payload["models"], "Expected model 'minicpm-o_2_6' in models")
-        self.assertIn("codellama-13b", payload["models"], "Expected model 'codellama-13b' in models")
-        self.assertIn("current_model", payload, "Payload missing current_model")
-        self.assertIn("current_config", payload, "Payload missing current_config")
+        self.assertIn("models", payload)
+        self.assertIn("minicpm-o_2_6", payload["models"])
+        self.assertIn("codellama-13b", payload["models"])
+        self.assertIn("clip-vision", payload["models"])
+        self.assertIn("current_model", payload)
+        self.assertIn("current_config", payload)
 
     def test_load_model(self):
-        """Test the 'load_model' task for codellama-13b."""
+        for model_id in ["codellama-13b", "minicpm-o_2_6", "clip-vision"]:
+            request = {
+                "version": self.api_version,
+                "task": "load_model",
+                "model_config_id": model_id
+            }
+            response = self.client.send_request(request)
+            self.assertEqual(response["status"], "okay")
+            self.assertEqual(response["server_state"], "ready")
+            self.assertEqual(response["model_config_id"], model_id)
+            self.assertIn(f"Model {model_id}", response["message"])
+
+    def test_load_invalid_model(self):
         request = {
             "version": self.api_version,
             "task": "load_model",
-            "model_config_id": "codellama-13b"
+            "model_config_id": "invalid-model"
         }
         response = self.client.send_request(request)
-        self.assertEqual(response["status"], "okay", f"Expected status 'okay', got {response}")
-        self.assertEqual(response["server_state"], "ready", f"Expected server_state 'ready', got {response['server_state']}")
-        self.assertEqual(response["model_config_id"], "codellama-13b", f"Expected model_config_id 'codellama-13b', got {response['model_config_id']}")
-        self.assertIn("Model codellama-13b", response["message"], f"Expected message to mention model loading, got {response['message']}")
+        self.assertEqual(response["status"], "error")
+        self.assertIn("not found", response["message"])
 
     def test_unload_model(self):
-        """Test the 'unload_model' task after loading a model."""
         load_request = {
             "version": self.api_version,
             "task": "load_model",
             "model_config_id": "codellama-13b"
         }
-        load_response = self.client.send_request(load_request)
-        self.assertEqual(load_response["status"], "okay", f"Failed to load model: {load_response}")
+        self.client.send_request(load_request)
 
         unload_request = {
             "version": self.api_version,
@@ -118,20 +113,35 @@ class TestModelServiceAPI(unittest.TestCase):
             "model_config_id": "codellama-13b"
         }
         response = self.client.send_request(unload_request)
-        self.assertEqual(response["status"], "okay", f"Expected status 'okay', got {response}")
-        self.assertEqual(response["server_state"], "ready", f"Expected server_state 'ready', got {response['server_state']}")
-        self.assertIsNone(response["model_config_id"], f"Expected model_config_id to be None, got {response['model_config_id']}")
-        self.assertEqual(response["message"], "Model unloaded", f"Expected message 'Model unloaded', got {response['message']}")
+        self.assertEqual(response["status"], "okay")
+        self.assertEqual(response["server_state"], "ready")
+        self.assertIsNone(response["model_config_id"])
+        self.assertEqual(response["message"], "Model unloaded")
 
-    def test_prompt_codellama(self):
-        """Test the 'prompt' task with codellama-13b."""
+    def test_unload_wrong_model(self):
         load_request = {
             "version": self.api_version,
             "task": "load_model",
             "model_config_id": "codellama-13b"
         }
-        load_response = self.client.send_request(load_request)
-        self.assertEqual(load_response["status"], "okay", f"Failed to load model: {load_response}")
+        self.client.send_request(load_request)
+
+        unload_request = {
+            "version": self.api_version,
+            "task": "unload_model",
+            "model_config_id": "minicpm-o_2_6"
+        }
+        response = self.client.send_request(unload_request)
+        self.assertEqual(response["status"], "error")
+        self.assertIn("Cannot unload minicpm-o_2_6", response["message"])
+
+    def test_prompt_codellama(self):
+        load_request = {
+            "version": self.api_version,
+            "task": "load_model",
+            "model_config_id": "codellama-13b"
+        }
+        self.client.send_request(load_request)
 
         prompt_request = {
             "version": self.api_version,
@@ -144,34 +154,169 @@ class TestModelServiceAPI(unittest.TestCase):
                 "top_p": 0.9
             }
         }
-        response = self.client.send_request(prompt_request)  # Fixed: Use prompt_request
-        self.assertEqual(response["status"], "okay", f"Expected status 'okay', got {response}")
-        self.assertIn("payload", response, "Response missing payload")
-        payload = response["payload"]
-        self.assertIn("result", payload, "Payload missing result")
-        self.assertIn("text", payload["result"], "Result missing text")
-        self.assertIn("hello_world", payload["result"]["text"], "Expected 'hello_world' in response text")
+        response = self.client.send_request(prompt_request)
+        self.assertEqual(response["status"], "okay")
+        self.assertIn("payload", response)
+        self.assertIn("result", response["payload"])
+        self.assertIn("text", response["payload"]["result"])
+        self.assertIn("hello_world", response["payload"]["result"]["text"])
+
+    def test_prompt_minicpm(self):
+        load_request = {
+            "version": self.api_version,
+            "task": "load_model",
+            "model_config_id": "minicpm-o_2_6"
+        }
+        self.client.send_request(load_request)
+
+        prompt_request = {
+            "version": self.api_version,
+            "task": "prompt",
+            "model_config_id": "minicpm-o_2_6",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": ["test prompt"]
+                }
+            ],
+            "params": {}
+        }
+        response = self.client.send_request(prompt_request)
+        self.assertEqual(response["status"], "okay")
+        self.assertIn("payload", response)
+        self.assertIn("result", response["payload"])
+        self.assertIn("files", response["payload"]["result"])
+        self.assertIn("output_audio_path", response["payload"]["result"]["files"])
+        self.assertTrue(response["payload"]["result"]["files"]["output_audio_path"]["data"].startswith("base64:"))
+
+    def test_prompt_clip_vision(self):
+        load_request = {
+            "version": self.api_version,
+            "task": "load_model",
+            "model_config_id": "clip-vision"
+        }
+        self.client.send_request(load_request)
+
+        prompt_request = {
+            "version": self.api_version,
+            "task": "prompt",
+            "model_config_id": "clip-vision",
+            "input_type": "image/jpeg",
+            "data": "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+        }
+        response = self.client.send_request(prompt_request)
+        self.assertEqual(response["status"], "okay")
+        self.assertIn("payload", response)
+        self.assertIn("result", response["payload"])
+        self.assertIn("features", response["payload"]["result"])
+
+    def test_prompt_invalid_input(self):
+        load_request = {
+            "version": self.api_version,
+            "task": "load_model",
+            "model_config_id": "codellama-13b"
+        }
+        self.client.send_request(load_request)
+
+        prompt_request = {
+            "version": self.api_version,
+            "task": "prompt",
+            "model_config_id": "codellama-13b",
+            "input": "",
+            "params": {}
+        }
+        response = self.client.send_request(prompt_request)
+        self.assertEqual(response["status"], "error")
+        self.assertIn("Prompt input required", response["message"])
+
+    def test_prompt_wrong_model(self):
+        load_request = {
+            "version": self.api_version,
+            "task": "load_model",
+            "model_config_id": "codellama-13b"
+        }
+        self.client.send_request(load_request)
+
+        prompt_request = {
+            "version": self.api_version,
+            "task": "prompt",
+            "model_config_id": "minicpm-o_2_6",
+            "messages": [{"role": "user", "content": ["test"]}],
+            "params": {}
+        }
+        response = self.client.send_request(prompt_request)
+        self.assertEqual(response["status"], "error")
+        self.assertIn("not loaded", response["message"])
 
     def test_invalid_version(self):
-        """Test request with invalid API version."""
         request = {
             "version": 999,
             "task": "status"
         }
         response = self.client.send_request(request)
-        self.assertEqual(response["status"], "error", f"Expected status 'error', got {response}")
-        self.assertIn("Invalid or missing version", response["message"], f"Expected version error message, got {response['message']}")
+        self.assertEqual(response["status"], "error")
+        self.assertIn("Invalid or missing version", response["message"])
 
     def test_invalid_task(self):
-        """Test request with invalid task."""
         request = {
             "version": self.api_version,
             "task": "invalid_task",
             "model_config_id": "codellama-13b"
         }
         response = self.client.send_request(request)
-        self.assertEqual(response["status"], "error", f"Expected status 'error', got {response}")
-        self.assertIn("Invalid task", response["message"], f"Expected invalid task message, got {response['message']}")
+        self.assertEqual(response["status"], "error")
+        self.assertIn("Invalid task", response["message"])
+
+    async def test_http_status(self):
+        response = await self.http_client.post(f"/api/v{self.api_version}/task", json={
+            "version": self.api_version,
+            "task": "status"
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "okay")
+        self.assertEqual(data["server_state"], "ready")
+        self.assertIn("payload", data)
+
+    async def test_http_load_model(self):
+        response = await self.http_client.post(f"/api/v{self.api_version}/task", json={
+            "version": self.api_version,
+            "task": "load_model",
+            "model_config_id": "codellama-13b"
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "okay")
+        self.assertEqual(data["model_config_id"], "codellama-13b")
+
+    async def test_http_invalid_version(self):
+        response = await self.http_client.post("/api/v999/task", json={
+            "version": 999,
+            "task": "status"
+        })
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("Invalid version", data["detail"])
+
+    async def test_http_busy_server(self):
+        with patch('src.model_manager.ModelManager.server_state', "busy"), \
+             patch('src.model_manager.ModelManager.busy_reason', "loading"):
+            response = await self.http_client.post(f"/api/v{self.api_version}/task", json={
+                "version": self.api_version,
+                "task": "load_model",
+                "model_config_id": "codellama-13b"
+            })
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["status"], "error")
+            self.assertIn("server is busy", data["message"])
+
+    async def test_malformed_request(self):
+        response = await self.http_client.post(f"/api/v{self.api_version}/task", json={})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "error")
+        self.assertIn("Invalid or missing version", data["message"])
 
 if __name__ == "__main__":
     unittest.main()

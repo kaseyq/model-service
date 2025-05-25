@@ -1,15 +1,13 @@
-# src/command_line_interface.py
 import logging
 import sys
 import torch
+import asyncio
 from src.model_manager import ModelManager
 from src.common.socket_utils import ModelServiceClient
 from src.common.config_utils import load_config
 import time
-import json
 
 logger = logging.getLogger(__name__)
-server_start_time = time.time()
 
 def command_line_interface():
     """Listen for command-line input to control the server."""
@@ -33,7 +31,7 @@ def command_line_interface():
                 print(f"Available models: {[cfg['model_config_id'] for cfg in ModelManager.MODEL_LOOKUP.values()]}")
                 print(f"Current model: {ModelManager.current_model_id or 'none'}")
             elif cmd_lower == "unload":
-                success, msg = ModelManager.unload()
+                success, msg = asyncio.run(ModelManager.unload())
                 if success:
                     logger.info(f"unload {success} {msg}")
                 else:
@@ -41,7 +39,7 @@ def command_line_interface():
                 print(f"unload: {success} {msg}")
             elif cmd_lower.startswith("load "):
                 model_id = cmd_lower[5:].strip()
-                success, msg = ModelManager.load(model_id, ModelManager.config['timeout'])
+                success, msg = asyncio.run(ModelManager.load(model_id, ModelManager.config['timeout']))
                 if success:
                     logger.info(f"load {success} {msg}")
                 else:
@@ -66,8 +64,8 @@ def command_line_interface():
                     request.update({
                         "input": prompt_input,
                         "params": {
-                            "max_length": 300,  # Reduced for concise output
-                            "temperature": 0.5,  # Lowered for focused output
+                            "max_length": 300,
+                            "temperature": 0.5,
                             "top_p": 0.9
                         }
                     })
@@ -81,6 +79,11 @@ def command_line_interface():
                         ],
                         "params": {}
                     })
+                elif ModelManager.current_model_id == "clip-vision":
+                    request.update({
+                        "image": f"base64:{prompt_input}",  # Assuming base64 input for testing
+                        "input_type": "image/jpeg"
+                    })
                 else:
                     print(f"Error: Prompt not supported for model {ModelManager.current_model_id}")
                     logger.error(f"Prompt not supported for model {ModelManager.current_model_id}")
@@ -90,7 +93,7 @@ def command_line_interface():
                     result = response.get("payload", {}).get("result", {})
                     if ModelManager.current_model_id == "codellama-13b":
                         text = result.get("text", "No text returned")
-                        max_display_length = 2000  # Limit to avoid terminal overload
+                        max_display_length = 2000
                         print(f"Response: {text[:max_display_length]}{'...' if len(text) > max_display_length else ''}")
                         logger.info(f"Prompt response: {text[:200]}...")
                     elif ModelManager.current_model_id == "minicpm-o_2_6":
@@ -101,6 +104,10 @@ def command_line_interface():
                         else:
                             print("Response: No audio output generated")
                             logger.info("Prompt response: No audio output")
+                    elif ModelManager.current_model_id == "clip-vision":
+                        features = result.get("features", [])
+                        print(f"Response: Image features extracted (length: {len(features)})")
+                        logger.info(f"Prompt response: Image features (length: {len(features)})")
                     else:
                         print("Response: Unknown response format")
                         logger.info(f"Prompt response: Unknown format {result}")
@@ -136,8 +143,8 @@ def command_line_interface():
                         request.update({
                             "input": prompt_input,
                             "params": {
-                                "max_length": 300,  # Reduced for concise output
-                                "temperature": 0.5,  # Lowered for focused output
+                                "max_length": 300,
+                                "temperature": 0.5,
                                 "top_p": 0.9
                             }
                         })
@@ -151,6 +158,11 @@ def command_line_interface():
                             ],
                             "params": {}
                         })
+                    elif ModelManager.current_model_id == "clip-vision":
+                        request.update({
+                            "image": f"base64:{prompt_input}",
+                            "input_type": "image/jpeg"
+                        })
                     else:
                         print(f"Error: Prompt not supported for model {ModelManager.current_model_id}")
                         logger.error(f"Prompt not supported for model {ModelManager.current_model_id}")
@@ -160,7 +172,7 @@ def command_line_interface():
                         result = response.get("payload", {}).get("result", {})
                         if ModelManager.current_model_id == "codellama-13b":
                             text = result.get("text", "No text returned")
-                            max_display_length = 2000  # Limit to avoid terminal overload
+                            max_display_length = 2000
                             print(f"Response: {text[:max_display_length]}{'...' if len(text) > max_display_length else ''}")
                             logger.info(f"Prompt response: {text[:200]}...")
                         elif ModelManager.current_model_id == "minicpm-o_2_6":
@@ -171,6 +183,10 @@ def command_line_interface():
                             else:
                                 print("Response: No audio output generated")
                                 logger.info("Prompt response: No audio output")
+                        elif ModelManager.current_model_id == "clip-vision":
+                            features = result.get("features", [])
+                            print(f"Response: Image features extracted (length: {len(features)})")
+                            logger.info(f"Prompt response: Image features (length: {len(features)})")
                         else:
                             print("Response: Unknown response format")
                             logger.info(f"Prompt response: Unknown format {result}")
